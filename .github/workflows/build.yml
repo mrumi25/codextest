@@ -1,0 +1,44 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Rebuild bundled HTML
+        shell: bash
+        run: |
+          mkdir -p app/src/main/assets
+          cat payload/chunk*.txt | base64 --decode | gzip -d > app/src/main/assets/index.html
+          ACTUAL=$(sha256sum app/src/main/assets/index.html | cut -d' ' -f1)
+          EXPECTED=ea94035a5a47bb67a9f8d40962cdcc716efe9ba196123249831d846003c449e0
+          echo "HTML SHA-256: $ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Build installable debug APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dnd5e-dice-lab-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
