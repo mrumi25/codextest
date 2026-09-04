@@ -29,13 +29,12 @@ public class MainActivity extends Activity {
 
         final boolean lowerDisplay = getIntent().getBooleanExtra(EXTRA_LOWER_DISPLAY, false);
         boolean dualScreen = false;
-        if (!lowerDisplay && isAynThor()) {
-            int secondDisplayId = findSecondDisplayId();
+        if (!lowerDisplay && isAynThorLikeDevice()) {
+            int secondDisplayId = findThorLowerDisplayId();
             if (secondDisplayId >= 0) dualScreen = launchLowerDisplay(secondDisplayId);
         }
 
         if (lowerDisplay) {
-            // The Thor's lower panel is a dedicated touch dice surface. Hide Android chrome there.
             getWindow().getDecorView().setSystemUiVisibility(
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                             | View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -74,7 +73,6 @@ public class MainActivity extends Activity {
             } else if (dualScreen) {
                 webView.loadUrl("file:///android_asset/index.html?thorScreen=top");
             } else {
-                // Normal one-screen behavior on Galaxy phones/tablets and non-Thor Android devices.
                 webView.loadUrl("file:///android_asset/index.html");
             }
         } else {
@@ -83,27 +81,51 @@ public class MainActivity extends Activity {
         webView.requestFocus(View.FOCUS_DOWN);
     }
 
-    private boolean isAynThor() {
+    private boolean isAynThorLikeDevice() {
         String fingerprint = ((Build.MANUFACTURER == null ? "" : Build.MANUFACTURER) + " "
                 + (Build.BRAND == null ? "" : Build.BRAND) + " "
                 + (Build.MODEL == null ? "" : Build.MODEL) + " "
                 + (Build.DEVICE == null ? "" : Build.DEVICE)).toLowerCase(Locale.ROOT);
-        // AYN firmware normally exposes AYN and/or Thor in these identifiers. The screen-count check
-        // below is still required, so a single-display AYN device will simply use the normal layout.
-        return fingerprint.contains("ayn") || fingerprint.contains("thor");
+        if (fingerprint.contains("ayn") || fingerprint.contains("thor")) return true;
+        return hasThorDisplayGeometry();
     }
 
-    private int findSecondDisplayId() {
+    private boolean hasThorDisplayGeometry() {
+        DisplayManager manager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+        if (manager == null) return false;
+        Display[] displays = manager.getDisplays();
+        if (displays == null || displays.length < 2) return false;
+        boolean hasTop = false, hasBottom = false;
+        for (Display display : displays) {
+            if (display == null || !display.isValid()) continue;
+            Display.Mode mode = display.getMode();
+            int w = mode.getPhysicalWidth(), h = mode.getPhysicalHeight();
+            int max = Math.max(w, h), min = Math.min(w, h);
+            if (near(max, 1920, 220) && near(min, 1080, 160)) hasTop = true;
+            if (near(max, 1240, 180) && near(min, 1080, 160)) hasBottom = true;
+        }
+        return hasTop && hasBottom;
+    }
+
+    private boolean near(int value, int target, int tolerance) {
+        return Math.abs(value - target) <= tolerance;
+    }
+
+    private int findThorLowerDisplayId() {
         DisplayManager manager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
         if (manager == null) return -1;
         Display[] displays = manager.getDisplays();
         if (displays == null) return -1;
+        int fallback = -1;
         for (Display display : displays) {
-            if (display != null && display.isValid() && display.getDisplayId() != Display.DEFAULT_DISPLAY) {
-                return display.getDisplayId();
-            }
+            if (display == null || !display.isValid() || display.getDisplayId() == Display.DEFAULT_DISPLAY) continue;
+            if (fallback < 0) fallback = display.getDisplayId();
+            Display.Mode mode = display.getMode();
+            int max = Math.max(mode.getPhysicalWidth(), mode.getPhysicalHeight());
+            int min = Math.min(mode.getPhysicalWidth(), mode.getPhysicalHeight());
+            if (near(max, 1240, 180) && near(min, 1080, 160)) return display.getDisplayId();
         }
-        return -1;
+        return fallback;
     }
 
     private boolean launchLowerDisplay(int displayId) {
@@ -118,8 +140,6 @@ public class MainActivity extends Activity {
             startActivity(intent, options.toBundle());
             return true;
         } catch (RuntimeException ex) {
-            // Graceful fallback: preserve the complete one-screen UI if vendor firmware denies the
-            // secondary-display launch instead of hiding the dice tray from the primary display.
             return false;
         }
     }
