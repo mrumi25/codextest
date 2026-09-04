@@ -5,6 +5,7 @@ import android.app.ActivityOptions;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.display.DisplayManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Display;
 import android.view.KeyEvent;
@@ -14,6 +15,8 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final String EXTRA_LOWER_DISPLAY = "dnd_lower_display";
@@ -26,15 +29,13 @@ public class MainActivity extends Activity {
 
         final boolean lowerDisplay = getIntent().getBooleanExtra(EXTRA_LOWER_DISPLAY, false);
         boolean dualScreen = false;
-        if (!lowerDisplay) {
+        if (!lowerDisplay && isAynThor()) {
             int secondDisplayId = findSecondDisplayId();
-            if (secondDisplayId >= 0) {
-                dualScreen = launchLowerDisplay(secondDisplayId);
-            }
+            if (secondDisplayId >= 0) dualScreen = launchLowerDisplay(secondDisplayId);
         }
 
         if (lowerDisplay) {
-            // The Thor's lower panel is a dedicated touch dice surface. Hide system chrome there.
+            // The Thor's lower panel is a dedicated touch dice surface. Hide Android chrome there.
             getWindow().getDecorView().setSystemUiVisibility(
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                             | View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -73,14 +74,23 @@ public class MainActivity extends Activity {
             } else if (dualScreen) {
                 webView.loadUrl("file:///android_asset/index.html?thorScreen=top");
             } else {
-                // Normal one-screen behavior on Galaxy phones/tablets, PC-like Android devices,
-                // or if Android does not expose a usable second logical display.
+                // Normal one-screen behavior on Galaxy phones/tablets and non-Thor Android devices.
                 webView.loadUrl("file:///android_asset/index.html");
             }
         } else {
             webView.restoreState(savedInstanceState);
         }
         webView.requestFocus(View.FOCUS_DOWN);
+    }
+
+    private boolean isAynThor() {
+        String fingerprint = ((Build.MANUFACTURER == null ? "" : Build.MANUFACTURER) + " "
+                + (Build.BRAND == null ? "" : Build.BRAND) + " "
+                + (Build.MODEL == null ? "" : Build.MODEL) + " "
+                + (Build.DEVICE == null ? "" : Build.DEVICE)).toLowerCase(Locale.ROOT);
+        // AYN firmware normally exposes AYN and/or Thor in these identifiers. The screen-count check
+        // below is still required, so a single-display AYN device will simply use the normal layout.
+        return fingerprint.contains("ayn") || fingerprint.contains("thor");
     }
 
     private int findSecondDisplayId() {
@@ -108,8 +118,8 @@ public class MainActivity extends Activity {
             startActivity(intent, options.toBundle());
             return true;
         } catch (RuntimeException ex) {
-            // If a vendor denies secondary-display activity launches, keep the complete one-screen UI
-            // instead of hiding the dice tray on the primary display.
+            // Graceful fallback: preserve the complete one-screen UI if vendor firmware denies the
+            // secondary-display launch instead of hiding the dice tray from the primary display.
             return false;
         }
     }
