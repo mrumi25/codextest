@@ -27,7 +27,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p app/src/main/assets
-          cat payload/chunk*.txt | base64 --decode | gzip -d > app/src/main/assets/index.html
+          cat $(find payload -maxdepth 1 -type f -name 'chunk*.txt' | sort -V) | base64 --decode | gzip -d > app/src/main/assets/index.html
           ACTUAL=$(sha256sum app/src/main/assets/index.html | cut -d' ' -f1)
           EXPECTED=f63a11b5f2ae042d4474bf738cf5d8db799453725b5025c4b9538df2f159fa06
           echo "HTML SHA-256: $ACTUAL"
