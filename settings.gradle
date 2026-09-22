@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "DnD5eDiceLab"
+rootProject.name = "ApologeticAsteroid"
 include ':app'
