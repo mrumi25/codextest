@@ -3,15 +3,15 @@ plugins {
 }
 
 android {
-    namespace 'com.mrumi.dnd5edicelab'
+    namespace 'com.mrumi.apologeticasteroid'
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.mrumi.dnd5edicelab'
+        applicationId 'com.mrumi.apologeticasteroid'
         minSdk 26
         targetSdk 35
-        versionCode 5
-        versionName '1.5.0'
+        versionCode 22
+        versionName '0.22.0'
     }
 
     buildTypes {
