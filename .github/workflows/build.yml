@@ -1,8 +1,8 @@
-name: Build APK
+name: Build Apologetic Asteroid APK
 
 on:
   push:
-    branches: [main]
+    branches: [apologetic-asteroid-apk-fix]
   workflow_dispatch:
 
 jobs:
@@ -23,22 +23,52 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Rebuild bundled HTML
+      - name: Rebuild game HTML
         shell: bash
         run: |
           mkdir -p app/src/main/assets
-          cat $(find payload -maxdepth 1 -type f -name 'chunk*.txt' | sort -V) | base64 --decode | gzip -d > app/src/main/assets/index.html
+          cat $(find apologetic_payload -maxdepth 1 -type f -name 'chunk*.txt' | sort -V) | base64 --decode | gzip -d > app/src/main/assets/index.html
           ACTUAL=$(sha256sum app/src/main/assets/index.html | cut -d' ' -f1)
-          EXPECTED=f63a11b5f2ae042d4474bf738cf5d8db799453725b5025c4b9538df2f159fa06
+          EXPECTED=0b8f288963c4718cdfe3d4bbcedb446e97035cbcd16dc5b6059e6ebd53f42d48
           echo "HTML SHA-256: $ACTUAL"
           test "$ACTUAL" = "$EXPECTED"
+          grep -q '<script src="three.min.js"></script>' app/src/main/assets/index.html
 
-      - name: Build installable debug APK
+      - name: Bundle Three.js offline
+        shell: bash
+        run: |
+          curl -L --fail --retry 4 https://raw.githubusercontent.com/mrdoob/three.js/r160/build/three.min.js -o app/src/main/assets/three.min.js
+          test $(wc -c < app/src/main/assets/three.min.js) -gt 600000
+          echo "Three.js bytes: $(wc -c < app/src/main/assets/three.min.js)"
+
+      - name: Syntax check game JavaScript
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re, pathlib
+          s=pathlib.Path('app/src/main/assets/index.html').read_text()
+          blocks=re.findall(r'<script>(.*?)</script>',s,re.S)
+          assert blocks, 'inline game script missing'
+          pathlib.Path('/tmp/game.js').write_text(blocks[-1])
+          PY
+          node --check /tmp/game.js
+
+      - name: Build S23 APK
         run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK contents
+        shell: bash
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -l "$APK" | grep 'assets/index.html'
+          unzip -l "$APK" | grep 'assets/three.min.js'
+          unzip -p "$APK" assets/three.min.js | wc -c
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: dnd5e-dice-lab-apk
+          name: apologetic-asteroid-s23-offline-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
